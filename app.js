@@ -17,7 +17,7 @@ const store = {
   set(k, v){ try{ localStorage.setItem('kuusikud.'+k, JSON.stringify(v)) }catch(e){} }
 };
 
-const st = Object.assign({amin:10, amax:30, share:50, area:0, drain:'all'}, store.get('filters', {}));
+const st = Object.assign({amin:10, amax:30, share:50, area:0, drain:'all', hideCut:true}, store.get('filters', {}));
 let favs = store.get('favs', {});          // id -> {note, t}
 let base = store.get('base', 'foto');
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -47,7 +47,14 @@ function setBase(b){
 $('layerBtn').onclick = () => setBase(base === 'foto' ? 'kaart' : 'foto');
 
 /* ---------- andmed ---------- */
-let data = [], byId = new Map(), kk = {}, filtered = [], selected = null, updated = '';
+let data = [], byId = new Map(), kk = {}, RC = {}, filtered = [], selected = null, updated = '';
+const fmtDate = d => { const [y, m, dd] = d.slice(0, 10).split('-'); return `${+dd}.${+m}.${y}`; };
+function cutText(f, long){
+  const r = f[13]; if (!r) return '';
+  const what = RC[r[1]] || 'raie', y = r[2].slice(0, 4);
+  if (r[0] === 'raie') return long ? `${what[0].toUpperCase() + what.slice(1)} registreeritud ${fmtDate(r[2])}. Ala võib olla raiutud.` : `${what} ${y}`;
+  return long ? `${what[0].toUpperCase() + what.slice(1)} registreeritud ${fmtDate(r[2])}.` : `${what} ${y}`;
+}
 const age = f => YEAR - f[1];
 const col = a => a <= 15 ? C.c1 : a <= 20 ? C.c2 : a <= 25 ? C.c3 : C.c4;
 const cls = a => a <= 15 ? 'c1' : a <= 20 ? 'c2' : a <= 25 ? 'c3' : 'c4';
@@ -56,7 +63,8 @@ const nf = (x, d=0) => x.toLocaleString('et-EE', {minimumFractionDigits:d, maxim
 function pass(f){
   const a = age(f);
   return a >= st.amin && a <= st.amax && f[3] >= st.share && f[4] >= st.area &&
-    (st.drain === 'all' || (st.drain === 'y') === (f[5] === 1));
+    (st.drain === 'all' || (st.drain === 'y') === (f[5] === 1)) &&
+    !(st.hideCut && f[13] && f[13][0] === 'raie');
 }
 
 function applyFilters(){
@@ -125,7 +133,7 @@ function onPos(p){
   meLayer.clearLayers();
   const ll = [me.lat, me.lon];
   if (me.acc < 2000) L.circle(ll, {renderer:rend, radius:me.acc, color:C.me, weight:1, fillColor:C.me, fillOpacity:.12, interactive:false}).addTo(meLayer);
-  L.circleMarker(ll, {renderer:rend, radius:8, color:'#fff', weight:3, fillColor:C.me, fillOpacity:1, interactive:false}).addTo(meLayer);
+  L.marker(ll, {icon:L.divIcon({className:'', html:'<div class="me-dot"></div>', iconSize:[18, 18]}), interactive:false, keyboard:false, zIndexOffset:1000}).addTo(meLayer);
   if (follow) map.setView(ll, first ? Math.max(map.getZoom(), 14) : map.getZoom(), {animate:!first});
   locState();
   updateNear();
@@ -165,7 +173,8 @@ const fmtDist = m => m < 1000 ? nf(Math.round(m/10)*10) + ' m' : m < 10000 ? nf(
 function itemHtml(f, ref){
   const a = age(f);
   const d = ref ? dist(ref, f[11]) : null;
-  const sub = [nf(f[4], 2) + ' ha', f[5] ? 'kuivendatud' : '', f[8]].filter(Boolean).join(' · ');
+  const nFinds = finds.filter(x => x.standId === f[12]).length;
+  const sub = [nf(f[4], 2) + ' ha', f[5] ? 'kuivendatud' : '', cutText(f), nFinds ? `${nFinds} ${nFinds === 1 ? 'leid' : 'leidu'}` : '', f[8]].filter(Boolean).join(' · ');
   return `<button class="item" data-id="${f[12]}"><i class="sw ${cls(a)}"></i>
     <span class="t">${AK[f[7]] || 'Kuusik'} · ${a} a · ${nf(f[2], f[2] % 1 ? 1 : 0)} m</span>
     <span class="d">${d !== null ? fmtDist(d) + `<small>${dir(ref, f[11])}</small>` : ''}</span>
@@ -204,10 +213,11 @@ let tab = 'near';
 function showTab(t){
   tab = t;
   document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
-  ['near', 'fav', 'filt'].forEach(p => $('pane-' + p).hidden = p !== t);
+  ['near', 'fav', 'finds', 'filt'].forEach(p => $('pane-' + p).hidden = p !== t);
   $('pane-stand').hidden = true;
   $('sheet').classList.remove('stand-open', 'collapsed');
   if (t === 'fav') renderFavs();
+  if (t === 'finds') renderFinds();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); };
 $('grip').onclick = () => $('sheet').classList.toggle('collapsed');
@@ -231,7 +241,11 @@ function openStand(f, zoom){
       </button>
     </div>
     <div class="big"><i class="sw ${cls(a)}" style="display:inline-block"></i>Kuusk ${a} a · ${nf(f[2], f[2] % 1 ? 1 : 0)} m
-      ${f[5] ? '<span class="chip">kuivendatud</span>' : ''}<span class="chip dist" id="distChip" hidden></span></div>
+      ${f[5] ? '<span class="chip">kuivendatud</span>' : ''}${f[13] && f[13][0] !== 'raie' ? `<span class="chip info">${cutText(f)}</span>` : ''}<span class="chip dist" id="distChip" hidden></span></div>
+    ${f[13] && f[13][0] === 'raie' ? `<p class="warnbox">${cutText(f, true)}</p>` : ''}
+    ${(() => { const h = finds.filter(x => x.standId === f[12]); if (!h.length) return '';
+        const last = h.reduce((a, b) => a.t > b.t ? a : b);
+        return `<p class="finds-here">Sinu leiud siin: ${h.length} · viimati ${fmtDate(new Date(last.t).toISOString())}</p>`; })()}
     <div class="comp">${comp.map(([o, s]) => `<span style="width:${o}%;background:${SPC[s] || '#9aa59c'}"></span>`).join('')}</div>
     <p class="ctxt">${comp.map(([o, s]) => `${SP[s] || s} ${o}%`).join(', ')}</p>
     <dl><dt>Kasvukohatüüp</dt><dd>${kh}</dd><dt>Kvartal ja eraldis</dt><dd>${f[8]}</dd>
@@ -245,7 +259,8 @@ function openStand(f, zoom){
     <div class="note"><label for="note">Minu märkmed</label>
       <textarea id="note" placeholder="Näiteks: head kohad põhjaservas kraavi ääres. Märkme lisamine salvestab metsa lemmikuks."></textarea></div>`;
   $('note').value = fav ? fav.note || '' : '';
-  ['near', 'fav', 'filt'].forEach(x => $('pane-' + x).hidden = true);
+  cancelDraft();
+  ['near', 'fav', 'finds', 'filt'].forEach(x => $('pane-' + x).hidden = true);
   p.hidden = false; p.scrollTop = 0;
   $('sheet').classList.add('stand-open'); $('sheet').classList.remove('collapsed');
   $('back').onclick = () => { selected = null; showTab(tab); render(); };
@@ -296,7 +311,9 @@ function syncFilterUI(){
   $('shareV').textContent = st.share + '%';
   $('areaV').textContent = nf(st.area, st.area % 1 ? 1 : 0) + ' ha';
   document.querySelectorAll('#drain button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st.drain));
+  $('hideCut').checked = st.hideCut;
 }
+$('hideCut').onchange = () => { st.hideCut = $('hideCut').checked; filtersChanged(); };
 let ft;
 function filtersChanged(){ syncFilterUI(); store.set('filters', st); clearTimeout(ft); ft = setTimeout(applyFilters, 150); }
 $('ageMin').oninput = $('ageMax').oninput = () => {
@@ -354,6 +371,174 @@ async function search(q){
 }
 map.on('click', () => { hideResults(); $('q').blur(); });
 
+/* ---------- leiud ---------- */
+let finds = store.get('finds', []);          // {id, lat, lon, t, amount(0-2), note, standId, acc}
+const AMT = ['Vähe', 'Parajalt', 'Palju'];
+const findLayer = L.layerGroup().addTo(map);
+const pinIcon = cls => L.divIcon({className:'', html:`<div class="find-pin ${cls || ''}"></div>`, iconSize:cls ? [26, 26] : [18, 18]});
+let draft = null;
+
+function saveFinds(){ store.set('finds', finds); renderFinds(); drawFinds(); updateNear(); }
+function drawFinds(){
+  findLayer.clearLayers();
+  for (const x of finds){
+    L.marker([x.lat, x.lon], {icon:pinIcon(), zIndexOffset:500, title:fmtDate(new Date(x.t).toISOString())})
+      .on('click', () => openFind(x, false)).addTo(findLayer);
+  }
+}
+function standAt(lat, lon){
+  let best = null, bestD = 60; // meetrit; kui punkt pole üheski kuusikus, võta lähim kuni 60 m kaugusel
+  for (const f of data){
+    const b = f.bb;
+    if (lat >= b[0] && lat <= b[2] && lon >= b[1] && lon <= b[3]){
+      for (const poly of f.ll){
+        const ring = poly[0]; let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+          const [yi, xi] = ring[i], [yj, xj] = ring[j];
+          if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+        }
+        if (inside) return f[12];
+      }
+    }
+    if (lat > b[0] - .001 && lat < b[2] + .001 && lon > b[1] - .002 && lon < b[3] + .002){
+      const d = dist([lat, lon], f[11]);
+      if (d < bestD){ bestD = d; best = f[12]; }
+    }
+  }
+  return best;
+}
+
+$('findBtn').onclick = () => {
+  if (me && me.acc < 150) return startFind(me.lat, me.lon, me.acc);
+  if (!('geolocation' in navigator)) return startFind(map.getCenter().lat, map.getCenter().lng, null);
+  toast('Otsin asukohta…', 8000);
+  navigator.geolocation.getCurrentPosition(
+    p => { toast('Asukoht leitud', 1200); startFind(p.coords.latitude, p.coords.longitude, p.coords.accuracy); },
+    () => { toast('Asukohta ei leitud. Lohista täpp õigesse kohta.', 4000); startFind(map.getCenter().lat, map.getCenter().lng, null); },
+    {enableHighAccuracy:true, timeout:10000, maximumAge:15000});
+};
+
+function cancelDraft(){ if (draft){ draft.marker.remove(); draft = null; } }
+
+function findForm(x, isNew){
+  const p = $('pane-stand');
+  const st0 = x.standId && byId.get(x.standId);
+  p.innerHTML = `
+    <div class="stand-head">
+      <button class="back" id="back" aria-label="Tagasi"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <h2>${isNew ? 'Uus leid' : 'Leid ' + fmtDate(new Date(x.t).toISOString())}</h2>
+    </div>
+    <p class="hint" id="findWhere"></p>
+    <span class="lbl">Kogus</span>
+    <div class="amount" id="amount">${AMT.map((a, i) => `<button type="button" data-a="${i}" aria-pressed="${x.amount === i}">${a}</button>`).join('')}</div>
+    <div class="note"><label for="findNote">Märkus</label>
+      <textarea id="findNote" placeholder="Näiteks: kuuseriisikad, kraavi ääres samblas"></textarea></div>
+    <div class="actions">
+      ${isNew ? '<button type="button" id="fCancel">Tühista</button><button type="button" class="primary" id="fSave">Salvesta leid</button>'
+              : `${st0 ? '<button type="button" id="fStand">Ava kuusik</button>' : ''}<button type="button" class="danger" id="fDel">Kustuta</button>`}
+    </div>`;
+  $('findNote').value = x.note || '';
+  const where = () => {
+    const s = x.standId && byId.get(x.standId);
+    $('findWhere').textContent = (s ? `Kuusikus ${s[8]} (kuusk ${age(s)} a). ` : 'Väljaspool kaardil olevaid kuusikuid. ') +
+      (isNew ? (x.acc ? `Asukoha täpsus ±${Math.round(x.acc)} m. ` : '') + 'Vajadusel lohista täpp kaardil õigesse kohta.' : '');
+  };
+  where();
+  ['near', 'fav', 'finds', 'filt'].forEach(t => $('pane-' + t).hidden = true);
+  p.hidden = false; p.scrollTop = 0;
+  $('sheet').classList.add('stand-open'); $('sheet').classList.remove('collapsed');
+  $('amount').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    x.amount = +b.dataset.a;
+    $('amount').querySelectorAll('button').forEach(z => z.setAttribute('aria-pressed', z === b));
+    if (!isNew) saveFinds();
+  };
+  let nt;
+  $('findNote').oninput = () => { x.note = $('findNote').value; if (!isNew){ clearTimeout(nt); nt = setTimeout(saveFinds, 400); } };
+  $('back').onclick = () => { cancelDraft(); showTab(isNew ? tab : 'finds'); };
+  if (isNew){
+    $('fCancel').onclick = () => { cancelDraft(); showTab(tab); };
+    $('fSave').onclick = () => {
+      finds.push(x); cancelDraft(); saveFinds();
+      toast('Leid salvestatud'); showTab('finds');
+    };
+    draft.marker.on('dragend', () => {
+      const ll = draft.marker.getLatLng(); x.lat = +ll.lat.toFixed(6); x.lon = +ll.lng.toFixed(6); x.acc = null;
+      x.standId = standAt(x.lat, x.lon); where();
+    });
+  } else {
+    if ($('fStand')) $('fStand').onclick = () => openStand(byId.get(x.standId), true);
+    $('fDel').onclick = () => {
+      const b = $('fDel');
+      if (!b.classList.contains('confirm')){ b.classList.add('confirm'); b.textContent = 'Kinnita kustutamine'; return; }
+      finds = finds.filter(z => z.id !== x.id); saveFinds(); toast('Leid kustutatud'); showTab('finds');
+    };
+  }
+}
+
+function startFind(lat, lon, acc){
+  cancelDraft(); selected = null; render();
+  const x = {id:Date.now().toString(36) + Math.random().toString(36).slice(2, 6), lat:+lat.toFixed(6), lon:+lon.toFixed(6),
+    t:Date.now(), amount:1, note:'', acc:acc ? Math.round(acc) : null, standId:null};
+  x.standId = standAt(x.lat, x.lon);
+  draft = {x, marker:L.marker([x.lat, x.lon], {icon:pinIcon('new'), draggable:true, zIndexOffset:2000}).addTo(map)};
+  follow = false; locState();
+  map.setView([x.lat, x.lon], Math.max(map.getZoom(), 16));
+  findForm(x, true);
+}
+function openFind(x, fly){
+  cancelDraft();
+  if (fly) map.setView([x.lat, x.lon], Math.max(map.getZoom(), 15));
+  findForm(x, false);
+}
+
+function renderFinds(){
+  $('findCount').textContent = finds.length ? finds.length : '';
+  const list = [...finds].sort((a, b) => b.t - a.t);
+  $('findList').innerHTML = list.map(x => {
+    const s = x.standId && byId.get(x.standId);
+    const ref = me ? [me.lat, me.lon] : null;
+    return `<li><button class="item" data-find="${x.id}"><i class="sw" style="background:#8a4b1f;border-radius:50%"></i>
+      <span class="t">${fmtDate(new Date(x.t).toISOString())} · ${AMT[x.amount].toLowerCase()}</span>
+      <span class="d">${ref ? fmtDist(dist(ref, [x.lat, x.lon])) : ''}</span>
+      <span class="s">${[s ? s[8] : 'väljaspool kuusikuid', x.note ? escapeHtml(x.note) : ''].filter(Boolean).join(' · ')}</span></button></li>`;
+  }).join('');
+  $('findEmpty').hidden = list.length > 0;
+}
+$('findList').onclick = e => {
+  const b = e.target.closest('button[data-find]'); if (!b) return;
+  const x = finds.find(z => z.id === b.dataset.find); if (x) openFind(x, true);
+};
+
+/* varukoopia */
+async function giveFile(name, text, type){
+  const file = new File([text], name, {type});
+  try{
+    if (navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:name}); return; }
+  }catch(e){ if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+$('exportBtn').onclick = () => giveFile(`kuusikud-varukoopia-${stamp()}.json`, JSON.stringify({app:'kuusikud', v:1, saved:new Date().toISOString(), finds, favs}, null, 1), 'application/json');
+$('gpxBtn').onclick = () => {
+  const esc = s => escapeHtml(s || '');
+  const wpts = finds.map(x => `  <wpt lat="${x.lat}" lon="${x.lon}"><time>${new Date(x.t).toISOString()}</time><name>Leid ${fmtDate(new Date(x.t).toISOString())} (${AMT[x.amount].toLowerCase()})</name>${x.note ? `<desc>${esc(x.note)}</desc>` : ''}</wpt>`).join('\n');
+  giveFile(`kuusikud-leiud-${stamp()}.gpx`, `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Kuusikud" xmlns="http://www.topografix.com/GPX/1/1">\n${wpts}\n</gpx>\n`, 'application/gpx+xml');
+};
+$('importFile').onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  try{
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'kuusikud' || !Array.isArray(d.finds)) throw new Error('vale fail');
+    const have = new Set(finds.map(x => x.id)); let nF = 0, nV = 0;
+    for (const x of d.finds) if (x && x.id && !have.has(x.id) && isFinite(x.lat) && isFinite(x.lon)){ finds.push(x); nF++; }
+    for (const [k, v] of Object.entries(d.favs || {})) if (!favs[k]){ favs[k] = v; nV++; }
+    saveFinds(); saveFavs();
+    toast(`Taastatud: ${nF} leidu, ${nV} lemmikut`, 3500);
+  }catch(err){ toast('Seda faili ei saanud lugeda. Vali Kuusikute varukoopia (.json).', 4000); }
+};
+
 /* ---------- muu ---------- */
 let tt;
 function toast(msg, ms = 2200){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(tt); tt = setTimeout(() => t.hidden = true, ms); }
@@ -372,10 +557,12 @@ function prep(f){
 setBase(base);
 syncFilterUI();
 fetch('data/kuusikud.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => {
-  kk = d.kk; updated = d.updated;
+  kk = d.kk; updated = d.updated; RC = d.raie_codes || {};
   d.f.forEach(prep); data = d.f;
-  const [y, m, dd] = updated.split('-'); $('upd').textContent = `${dd}.${m}.${y}`;
-  applyFilters(); renderFavs();
+  $('upd').textContent = fmtDate(updated);
+  const nCut = data.filter(f => f[13] && f[13][0] === 'raie').length;
+  $('cutInfo').textContent = `${nf(nCut)} kuusikut, kus pärast inventeerimist on registreeritud lageraie, raadamine või muu uuendusraie.`;
+  applyFilters(); renderFavs(); renderFinds(); drawFinds();
   $('splash').classList.add('gone'); setTimeout(() => $('splash').hidden = true, 400);
 }).catch(() => { $('splashMsg').textContent = 'Andmete laadimine ebaõnnestus. Kontrolli internetiühendust ja ava rakendus uuesti.'; });
 

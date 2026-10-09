@@ -31,3 +31,12 @@ Ortofoto ruudud salvestuvad neis kohtades, mida oled kaardil vaadanud
 ANDMETE UUENDAMINE
 Asenda data/kuusikud.json uuega ja muuda sw.js failis VERSION rida,
 et telefonid laadiksid uue versiooni.
+
+UUENDUSED 09.10.2026
+- Raiutud alad: kuusikud, kus pärast inventeerimist on metsateatisega
+  registreeritud lageraie, raadamine või muu uuendusraie, on vaikimisi
+  peidetud (Filtrid → Peida raiutud alad). Harvendus- ja sanitaarraie
+  kuvatakse kuusiku juures infona.
+- Leidude logi: nupp „Leid“ salvestab asukoha, kuupäeva, koguse ja
+  märkuse. Leiud on vahekaardil „Leiud“, kust saab teha varukoopia,
+  selle taastada või leiud GPX-failina alla laadida.

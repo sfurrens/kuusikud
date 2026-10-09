@@ -127,3 +127,32 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
   .topbar .search,.topbar .results{margin-left:16px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* leiud, raied */
+.fab.find{color:#8a4b1f}
+@media (prefers-color-scheme: dark){.fab.find{color:#e0a26f}}
+.find-pin{width:18px;height:18px;border-radius:50%;background:#8a4b1f;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.find-pin.new{width:26px;height:26px;background:var(--accent);animation:pulse .8s infinite alternate}
+.me-dot{width:18px;height:18px;border-radius:50%;background:var(--me);border:3px solid #fff;box-shadow:0 0 0 2px rgba(42,127,255,.35),0 1px 4px rgba(0,0,0,.4)}
+.chip.warn{border-color:#c62828;color:#c62828;font-weight:600}
+.chip.info{border-color:var(--muted)}
+@media (prefers-color-scheme: dark){.chip.warn{border-color:#ff6b6b;color:#ff6b6b}}
+.warnbox{border:1px solid #c62828;border-radius:10px;padding:8px 10px;font-size:13px;margin:0 0 10px;color:var(--fg)}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:600}
+.check input{width:20px;height:20px;margin:1px 0 0;accent-color:var(--accent);flex:none}
+.check small{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px}
+.backup{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.backup button,.filebtn{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:13px;font-weight:600;cursor:pointer;color:var(--fg)}
+.filebtn input{display:none}
+.amount{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:4px 0 12px}
+.amount button{flex:1;border:0;background:none;padding:10px 4px;font-size:15px}
+.amount button+button{border-left:1px solid var(--line)}
+.amount button[aria-pressed="true"]{background:#8a4b1f;color:#fff}
+.actions{display:flex;gap:8px;margin-top:12px}
+.actions button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 6px;font-weight:600;font-size:15px}
+.actions button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.actions button.danger{color:#c62828;border-color:#c62828}
+.actions button.danger.confirm{background:#c62828;color:#fff}
+.finds-here{font-size:14px;margin:0 0 10px;color:#8a4b1f;font-weight:600}
+@media (prefers-color-scheme: dark){.finds-here{color:#e0a26f}}
+.tabs button{font-size:13px}
