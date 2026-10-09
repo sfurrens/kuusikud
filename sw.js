@@ -1,6 +1,6 @@
 /* Võrguühenduseta töö: rakendus ja andmed salvestatakse telefoni,
    vaadatud kaardiruudud puhverdatakse (kuni MAX_TILES tükki). */
-const VERSION = 'kuusikud-2026-10-09b';
+const VERSION = 'kuusikud-2026-10-09c';
 const APP = [
   './', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest',
   'vendor/leaflet.js', 'vendor/leaflet.css',

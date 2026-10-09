@@ -215,15 +215,112 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
   ['near', 'fav', 'finds', 'filt'].forEach(p => $('pane-' + p).hidden = p !== t);
   $('pane-stand').hidden = true;
-  $('sheet').classList.remove('stand-open', 'collapsed');
+  $('sheet').classList.remove('stand-open'); ensureOpen();
   if (t === 'fav') renderFavs();
   if (t === 'finds') renderFinds();
 }
 $('tabs').onclick = e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); };
-$('grip').onclick = () => $('sheet').classList.toggle('collapsed');
-new ResizeObserver(() => document.documentElement.style.setProperty('--sheet-h', $('sheet').offsetHeight + 'px')).observe($('sheet'));
+new ResizeObserver(() => {
+  const h = $('sheet').offsetHeight;
+  document.documentElement.style.setProperty('--sheet-h', h + 'px');
+  $('locBtn').parentElement.classList.toggle('hide', h > window.innerHeight * .62);
+}).observe($('sheet'));
 
-function sheetPad(){ return window.innerWidth >= 900 ? [400, 20] : [0, $('sheet').offsetHeight]; }
+/* ---------- lohistatav paneel ---------- */
+const sheet = $('sheet');
+let snap = store.get('snap', 'half'), drag = null, dragged = false;
+const wide = () => window.innerWidth >= 900;
+function snapHeights(){
+  const H = window.innerHeight;
+  const cs = getComputedStyle(sheet);
+  const head = sheet.classList.contains('stand-open') ? sheet.querySelector('.stand-head') : $('tabs');
+  const peek = $('grip').offsetHeight + (head ? head.offsetHeight + 12 : 50) + parseFloat(cs.paddingBottom);
+  const top = $('searchForm').getBoundingClientRect().bottom + 10;
+  const full = Math.max(peek + 200, H - top);
+  const half = Math.min(Math.max(peek + 160, Math.round(H * .45)), full);
+  return {peek:Math.round(peek), half, full:Math.round(full)};
+}
+function setSnap(name, animate = true){
+  if (wide()){ sheet.style.height = ''; return; }
+  snap = name; store.set('snap', name === 'full' ? 'half' : name);
+  if (!animate) sheet.classList.add('dragging');
+  sheet.style.height = snapHeights()[name] + 'px';
+  if (!animate) requestAnimationFrame(() => sheet.classList.remove('dragging'));
+}
+function ensureOpen(showMap){ if (snap === 'peek' || (showMap && snap === 'full')) setSnap('half'); else setSnap(snap); }
+$('grip').onclick = () => { if (!dragged) setSnap(snap === 'peek' ? 'half' : snap === 'half' ? 'full' : 'peek'); };
+function visiblePane(){ return [...sheet.querySelectorAll('.pane')].find(p => !p.hidden); }
+
+sheet.addEventListener('touchstart', e => {
+  if (wide() || e.touches.length !== 1) return;
+  const t = e.target;
+  if (t.closest('input, textarea, select, .dual')) return;
+  const fromPane = !t.closest('.grip, .tabs, .stand-head');
+  const y = e.touches[0].clientY, now = performance.now();
+  drag = {y0:y, h0:sheet.offsetHeight, last:y, lt:now, v:0, active:false, fromPane, pane:visiblePane()};
+}, {passive:true});
+
+sheet.addEventListener('touchmove', e => {
+  if (!drag) return;
+  const y = e.touches[0].clientY, dy = y - drag.y0;
+  if (!drag.active){
+    if (Math.abs(dy) < 8) return;
+    if (drag.fromPane){
+      const atTop = !drag.pane || drag.pane.scrollTop <= 0;
+      const pullDown = dy > 0 && atTop, pullUp = dy < 0 && snap !== 'full';
+      if (!pullDown && !pullUp){ drag = null; return; }
+    }
+    drag.active = true; drag.y0 = y; drag.h0 = sheet.offsetHeight;
+    sheet.classList.add('dragging');
+  }
+  e.preventDefault();
+  const now = performance.now();
+  drag.v = (y - drag.last) / Math.max(1, now - drag.lt); drag.last = y; drag.lt = now;
+  const S = snapHeights();
+  let h = drag.h0 - (y - drag.y0);
+  if (h > S.full) h = S.full + (h - S.full) * .25;      // kerge vastupanu servades
+  if (h < S.peek) h = S.peek - (S.peek - h) * .25;
+  sheet.style.height = Math.round(h) + 'px';
+}, {passive:false});
+
+function endDrag(){
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (!d.active) return;
+  sheet.classList.remove('dragging');
+  dragged = true; setTimeout(() => dragged = false, 80);
+  const S = snapHeights(), h = sheet.offsetHeight;
+  const order = ['peek', 'half', 'full'];
+  let target;
+  if (d.v < -.45) target = order.find(n => S[n] > h + 8) || 'full';
+  else if (d.v > .45) target = [...order].reverse().find(n => S[n] < h - 8) || 'peek';
+  else target = order.reduce((a, b) => Math.abs(S[b] - h) < Math.abs(S[a] - h) ? b : a);
+  setSnap(target);
+}
+sheet.addEventListener('touchend', endDrag);
+sheet.addEventListener('touchcancel', endDrag);
+sheet.addEventListener('click', e => { if (dragged){ e.stopPropagation(); e.preventDefault(); } }, true);
+
+/* hiirega lohistamine käepidemest (arvutis kitsas aknas) */
+$('grip').addEventListener('mousedown', e => {
+  if (wide()) return;
+  const y0 = e.clientY, h0 = sheet.offsetHeight; let moved = false;
+  sheet.classList.add('dragging');
+  const mv = ev => { if (Math.abs(ev.clientY - y0) > 4) moved = true; sheet.style.height = Math.max(snapHeights().peek, Math.min(snapHeights().full, h0 - (ev.clientY - y0))) + 'px'; };
+  const up = () => {
+    document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+    sheet.classList.remove('dragging');
+    if (!moved) return;
+    dragged = true; setTimeout(() => dragged = false, 80);
+    const S = snapHeights(), h = sheet.offsetHeight;
+    setSnap(['peek', 'half', 'full'].reduce((a, b) => Math.abs(S[b] - h) < Math.abs(S[a] - h) ? b : a));
+  };
+  document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+});
+window.addEventListener('resize', () => setSnap(snap, false));
+setSnap(snap, false);
+
+function sheetPad(){ return window.innerWidth >= 900 ? [400, 20] : [0, snapHeights()[snap]]; }
 
 function openStand(f, zoom){
   selected = f;
@@ -262,7 +359,7 @@ function openStand(f, zoom){
   cancelDraft();
   ['near', 'fav', 'finds', 'filt'].forEach(x => $('pane-' + x).hidden = true);
   p.hidden = false; p.scrollTop = 0;
-  $('sheet').classList.add('stand-open'); $('sheet').classList.remove('collapsed');
+  $('sheet').classList.add('stand-open'); ensureOpen(true);
   $('back').onclick = () => { selected = null; showTab(tab); render(); };
   $('heart').onclick = () => {
     if (favs[f[12]]) delete favs[f[12]]; else favs[f[12]] = {note:$('note').value, t:Date.now()};
@@ -446,7 +543,7 @@ function findForm(x, isNew){
   where();
   ['near', 'fav', 'finds', 'filt'].forEach(t => $('pane-' + t).hidden = true);
   p.hidden = false; p.scrollTop = 0;
-  $('sheet').classList.add('stand-open'); $('sheet').classList.remove('collapsed');
+  $('sheet').classList.add('stand-open'); ensureOpen(true);
   $('amount').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     x.amount = +b.dataset.a;
