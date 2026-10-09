@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Kuusikud</title>
+<meta name="description" content="Riigimetsa noored kuusikud kaardil – kuuseriisika kohad.">
+<meta name="theme-color" content="#1c3a28">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kuusikud">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="map" aria-label="Kaart"></div>
+
+<header class="topbar">
+  <form class="search" id="searchForm" role="search" autocomplete="off">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+    <input id="q" type="search" placeholder="Otsi küla, linna või aadressi" enterkeyhint="search" aria-label="Otsi kohta">
+    <button type="button" id="qClear" class="iconbtn" aria-label="Tühjenda otsing" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </form>
+  <ul class="results" id="results" hidden></ul>
+</header>
+
+<div class="fabs">
+  <button class="fab" id="layerBtn" aria-label="Vaheta aluskaarti" title="Aluskaart">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+    <span id="layerLbl">Foto</span>
+  </button>
+  <button class="fab" id="locBtn" aria-label="Näita minu asukohta" title="Minu asukoht">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6.5"/><circle class="dot" cx="12" cy="12" r="2.6"/></svg>
+  </button>
+</div>
+
+<section class="sheet" id="sheet" aria-label="Kuusikud">
+  <button class="grip" id="grip" aria-label="Ava või sulge paneel"><span></span></button>
+  <nav class="tabs" id="tabs" role="tablist">
+    <button role="tab" data-tab="near" aria-selected="true">Lähedal</button>
+    <button role="tab" data-tab="fav" aria-selected="false">Lemmikud <b id="favCount"></b></button>
+    <button role="tab" data-tab="filt" aria-selected="false">Filtrid</button>
+  </nav>
+
+  <div class="pane" id="pane-near">
+    <div class="summary"><b id="count">…</b> <span id="countLbl">kuusikut</span></div>
+    <p class="hint" id="nearHint"></p>
+    <ol class="list" id="nearList"></ol>
+  </div>
+
+  <div class="pane" id="pane-fav" hidden>
+    <ol class="list" id="favList"></ol>
+    <p class="hint" id="favEmpty">Lemmikuid veel pole. Ava kuusik ja vajuta südamele. Lemmikud ja märkmed jäävad ainult sinu telefoni.</p>
+  </div>
+
+  <div class="pane" id="pane-filt" hidden>
+    <div class="field">
+      <div class="row"><label for="ageMin">Kuuse vanus</label><span class="val" id="ageV"></span></div>
+      <div class="dual"><div class="track"></div><div class="fill" id="ageFill"></div>
+        <input id="ageMin" type="range" min="10" max="30" value="10" aria-label="Vanus alates">
+        <input id="ageMax" type="range" min="10" max="30" value="30" aria-label="Vanus kuni"></div>
+    </div>
+    <div class="field">
+      <div class="row"><label for="share">Kuuse osakaal vähemalt</label><span class="val" id="shareV"></span></div>
+      <input id="share" type="range" min="50" max="100" step="10" value="50">
+    </div>
+    <div class="field">
+      <div class="row"><label for="area">Pindala vähemalt</label><span class="val" id="areaV"></span></div>
+      <input id="area" type="range" min="0" max="5" step="0.5" value="0">
+    </div>
+    <div class="field">
+      <span class="lbl">Muld</span>
+      <div class="seg" id="drain" role="group" aria-label="Kuivendus">
+        <button data-v="all" aria-pressed="true">Kõik</button>
+        <button data-v="y" aria-pressed="false">Kuivendatud</button>
+        <button data-v="n" aria-pressed="false">Kuivendamata</button>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="c1"></i>10–15 a</span><span><i class="c2"></i>16–20 a</span><span><i class="c3"></i>21–25 a</span><span><i class="c4"></i>26–30 a</span>
+    </div>
+    <p class="fine">Andmed: Keskkonnaagentuur, metsaregister (CC BY 4.0), seis <span id="upd"></span>. Aluskaart ja ortofoto: Maa- ja Ruumiamet. Näidatakse riigimetsa eraldisi, kus kuusk on enamuspuuliik. Vanus on arvutatud kuuse sünniaasta järgi. Vaata kohapeal üle, kas ala pole vahepeal raiutud.</p>
+  </div>
+
+  <div class="pane" id="pane-stand" hidden></div>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="splash" id="splash"><div><img src="icons/icon-192.png" alt="" width="72" height="72"><p id="splashMsg">Laen kuusikuid…</p></div></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
